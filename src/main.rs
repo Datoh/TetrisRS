@@ -8,73 +8,88 @@ use ggez::nalgebra as na;
 use ggez::timer;
 use ggez::{Context, GameResult};
 
-use rand::Rng;
+use rand::{ distributions::{Distribution, Standard}, Rng};
 
-const INITIAL_SPEED_MOVE: Duration = Duration::from_millis(300);
+const INITIAL_SPEED_MOVE: Duration = Duration::from_secs(1);
 
 const GRID_WIDTH: usize = 10;
 const GRID_HEIGHT: usize = 20;
 
-type Case = u8;
+#[derive(Clone,Copy,PartialEq)]
+enum Case {
+  Empty,
+  Red,
+  Green,
+  Blue,
+  Yellow,
+  DarkYellow,
+  Purple,
+  Cyan,
+}
 
-const CASE_NONE:        Case = 0;
-const CASE_RED:         Case = 1;
-const CASE_GREEN:       Case = 2;
-const CASE_BLUE:        Case = 3;
-const CASE_YELLOW:      Case = 4;
-const CASE_DARK_YELLOW: Case = 5;
-const CASE_PURPLE:      Case = 6;
-const CASE_CYAN:        Case = 7;
-
-const CASE_SIZE:   u32 = 20;
-const CASE_BORDER: u32 = 2;
+impl Distribution<Case> for Standard {
+  fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Case {
+    match rng.gen_range(1, 8) {
+      1 => Case::Red,
+      2 => Case::Green,
+      3 => Case::Blue,
+      4 => Case::Yellow,
+      5 => Case::DarkYellow,
+      6 => Case::Purple,
+      7 => Case::Cyan,
+      _ => Case::Empty,
+    }
+  }
+}
+const CASE_SIZE:   f32 = 20.0;
+const CASE_BORDER: f32 = 2.0;
 
 fn case_color(case: Case) -> graphics::Color {
   return match case {
-    CASE_RED => graphics::Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
-    CASE_GREEN => graphics::Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 },
-    CASE_BLUE => graphics::Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 },
-    CASE_YELLOW => graphics::Color { r: 1.0, g: 1.0, b: 0.0, a: 1.0 },
-    CASE_DARK_YELLOW => graphics::Color { r: 1.0, g: 0.85, b: 0.0, a: 1.0 },
-    CASE_PURPLE => graphics::Color { r: 0.5, g: 0.0, b: 0.5, a: 1.0 },
-    CASE_CYAN => graphics::Color { r: 0.0, g: 1.0, b: 1.0, a: 1.0 },
-    _ => panic!("Unknow case type {}", case),
+    Case::Red => graphics::Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
+    Case::Green => graphics::Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 },
+    Case::Blue => graphics::Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 },
+    Case::Yellow => graphics::Color { r: 1.0, g: 1.0, b: 0.0, a: 1.0 },
+    Case::DarkYellow => graphics::Color { r: 1.0, g: 0.85, b: 0.0, a: 1.0 },
+    Case::Purple => graphics::Color { r: 0.5, g: 0.0, b: 0.5, a: 1.0 },
+    Case::Cyan => graphics::Color { r: 0.0, g: 1.0, b: 1.0, a: 1.0 },
+    _ => panic!("Unknow case type"),
   };
 }
 
 fn piece_cases(case: Case) -> Vec<Vec<Case>> {
   return match case {
-    CASE_RED => vec![
-      vec![CASE_RED, CASE_RED, CASE_NONE], 
-      vec![CASE_NONE, CASE_RED, CASE_RED],
+    Case::Red => vec![
+      vec![Case::Red, Case::Red, Case::Empty], 
+      vec![Case::Empty, Case::Red, Case::Red],
     ],
-    CASE_GREEN => vec![
-      vec![CASE_NONE, CASE_GREEN, CASE_GREEN],
-      vec![CASE_GREEN, CASE_GREEN, CASE_NONE], 
+    Case::Green => vec![
+      vec![Case::Empty, Case::Green, Case::Green],
+      vec![Case::Green, Case::Green, Case::Empty], 
     ],
-    CASE_BLUE => vec![
-      vec![CASE_BLUE, CASE_NONE, CASE_NONE],
-      vec![CASE_BLUE, CASE_BLUE, CASE_BLUE], 
+    Case::Blue => vec![
+      vec![Case::Blue, Case::Empty, Case::Empty],
+      vec![Case::Blue, Case::Blue, Case::Blue], 
     ],
-    CASE_YELLOW => vec![
-      vec![CASE_NONE, CASE_NONE, CASE_YELLOW],
-      vec![CASE_YELLOW, CASE_YELLOW, CASE_YELLOW], 
+    Case::Yellow => vec![
+      vec![Case::Empty, Case::Empty, Case::Yellow],
+      vec![Case::Yellow, Case::Yellow, Case::Yellow], 
     ],
-    CASE_DARK_YELLOW => vec![
-      vec![CASE_DARK_YELLOW, CASE_DARK_YELLOW],
-      vec![CASE_DARK_YELLOW, CASE_DARK_YELLOW], 
+    Case::DarkYellow => vec![
+      vec![Case::DarkYellow, Case::DarkYellow],
+      vec![Case::DarkYellow, Case::DarkYellow], 
     ],
-    CASE_PURPLE => vec![
-      vec![CASE_NONE, CASE_PURPLE, CASE_NONE],
-      vec![CASE_PURPLE, CASE_PURPLE, CASE_PURPLE], 
+    Case::Purple => vec![
+      vec![Case::Empty, Case::Purple, Case::Empty],
+      vec![Case::Purple, Case::Purple, Case::Purple], 
     ],
-    CASE_CYAN => vec![
-      vec![CASE_CYAN],
-      vec![CASE_CYAN],
-      vec![CASE_CYAN],
-      vec![CASE_CYAN],
+    Case::Cyan => vec![
+      vec![Case::Cyan],
+      vec![Case::Cyan],
+      vec![Case::Cyan],
+      vec![Case::Cyan],
     ],
-    _ => panic!("Unknow case type {}", case),
+    _ => panic!("Unknow case type"),
   };
 }
 
@@ -101,14 +116,21 @@ fn generate_piece(case: Case) -> Piece {
 
 struct MainState {
   grid: [[Case; GRID_HEIGHT]; GRID_WIDTH],
+  grid_rect: graphics::Rect,
   current_piece: Option<Piece>,
   move_speed: Duration,
 }
 
 impl MainState {
   fn new() -> GameResult<MainState> {
+    let width = (GRID_WIDTH as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
+    let height = (GRID_HEIGHT as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
+    let left = (800.0 - width) / 2.0;
+    let top = (600.0 - height) / 2.0;
+
     let s = MainState {
-      grid: [[CASE_NONE; GRID_HEIGHT]; GRID_WIDTH],
+      grid: [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH],
+      grid_rect: graphics::Rect::new(left, top, width, height),
       current_piece: None,
       move_speed: INITIAL_SPEED_MOVE,
     };
@@ -119,10 +141,10 @@ impl MainState {
     let piece = self.current_piece.as_ref().unwrap();
     for (i_v_y, line) in piece.cases.iter().enumerate() {
       let i_y = piece.y as usize + i_v_y;
-      for (i_v_x, case) in line.iter().enumerate() {
-        if *case != CASE_NONE {
+      for (i_v_x, &case) in line.iter().enumerate() {
+        if case != Case::Empty {
           let i_x = piece.x as usize + i_v_x;
-          self.grid[i_x][i_y] = *case;
+          self.grid[i_x][i_y] = case;
         }
       }
     }
@@ -141,9 +163,9 @@ impl MainState {
     for (i_v_y, line) in piece.cases.iter().enumerate() {
       let i_y = (piece.y as i32 + dy) as usize + i_v_y;
       for (i_v_x, &case) in line.iter().enumerate() {
-        if case != CASE_NONE {
+        if case != Case::Empty {
           let i_x = (piece.x as i32 + dx) as usize + i_v_x;
-          if self.grid[i_x][i_y] != CASE_NONE {
+          if self.grid[i_x][i_y] != Case::Empty {
             return true;
           }
         }
@@ -177,59 +199,49 @@ impl MainState {
   }
 
   fn draw_grid(&mut self, ctx: &mut Context) -> GameResult {
-    let width = ((GRID_WIDTH as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
-    let height = ((GRID_HEIGHT as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
-    let left = (800.0 - width as f32) / 2.0;
-    let top = (600.0 - height as f32) / 2.0;
-
     let gridmesh_builder = &mut graphics::MeshBuilder::new();
     gridmesh_builder.rectangle(
       graphics::DrawMode::stroke(1.0),
-      graphics::Rect::new(0.0, 0.0, width, height),
+      graphics::Rect::new(0.0, 0.0, self.grid_rect.w, self.grid_rect.h),
       graphics::WHITE,
     );
     for i_y in 1..GRID_HEIGHT {
-      let y = (i_y as u32 * (CASE_SIZE + CASE_BORDER * 2)) as f32;
+      let y = (i_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0);
       gridmesh_builder.line(
-        &[na::Point2::new(0.0, y), na::Point2::new(width, y)],
+        &[na::Point2::new(0.0, y), na::Point2::new(self.grid_rect.w, y)],
         1.0,
         graphics::WHITE
       )?;
     }
     for i_x in 1..GRID_WIDTH {
-      let x = (i_x as u32 * (CASE_SIZE + CASE_BORDER * 2)) as f32;
+      let x = (i_x as f32) * (CASE_SIZE + CASE_BORDER * 2.0);
       gridmesh_builder.line(
-        &[na::Point2::new(x, 0.0), na::Point2::new(x, height)],
+        &[na::Point2::new(x, 0.0), na::Point2::new(x, self.grid_rect.h)],
         1.0,
         graphics::WHITE
       )?;
     }
     let grid_mesh = gridmesh_builder.build(ctx)?;
 
-    graphics::draw(ctx, &grid_mesh, (na::Point2::new(left, top),))?;
+    graphics::draw(ctx, &grid_mesh, (na::Point2::new(self.grid_rect.x, self.grid_rect.y),))?;
 
     Ok(())
   }
 
   fn draw_case(&mut self, ctx: &mut Context) -> GameResult {
-    let width = ((GRID_WIDTH as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
-    let height = ((GRID_HEIGHT as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
-    let left = (800.0 - width as f32) / 2.0;
-    let top = (600.0 - height as f32) / 2.0;
-
     for i_x in 0..GRID_WIDTH {
-      let x = (i_x as u32 * (CASE_SIZE + CASE_BORDER * 2) + CASE_BORDER) as f32;
+      let x = (i_x as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
       for i_y in 0..GRID_HEIGHT {
         let case = self.grid[i_x][i_y];
-        if case != CASE_NONE {
-          let y = (i_y as u32 * (CASE_SIZE + CASE_BORDER * 2) + CASE_BORDER) as f32;
+        if case != Case::Empty {
+          let y = (i_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
           let mesh_case = graphics::Mesh::new_rectangle(
             ctx, 
             graphics::DrawMode::fill(),
             graphics::Rect::new(x, y, CASE_SIZE as f32, CASE_SIZE as f32),
             case_color(case),
           )?;
-          graphics::draw(ctx, &mesh_case, (na::Point2::new(left, top),))?;
+          graphics::draw(ctx, &mesh_case, (na::Point2::new(self.grid_rect.x, self.grid_rect.y),))?;
         }
       }
     }
@@ -240,25 +252,20 @@ impl MainState {
   fn draw_current_piece(&mut self, ctx: &mut Context) -> GameResult {
     match &self.current_piece {
       Some (piece) => {
-        let width = ((GRID_WIDTH as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
-        let height = ((GRID_HEIGHT as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
-        let left = (800.0 - width as f32) / 2.0;
-        let top = (600.0 - height as f32) / 2.0;
-
         for (i_v_y, line) in piece.cases.iter().enumerate() {
           let i_y = piece.y + i_v_y as u32;
-          let y = (i_y * (CASE_SIZE + CASE_BORDER * 2) + CASE_BORDER) as f32;
+          let y = (i_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
           for (i_v_x, &case) in line.iter().enumerate() {
-            if case != CASE_NONE {
+            if case != Case::Empty {
               let i_x = piece.x + i_v_x as u32;
-              let x = (i_x * (CASE_SIZE + CASE_BORDER * 2) + CASE_BORDER) as f32;
+              let x = (i_x as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
               let mesh_case = graphics::Mesh::new_rectangle(
                 ctx, 
                 graphics::DrawMode::fill(),
-                graphics::Rect::new(x, y, CASE_SIZE as f32, CASE_SIZE as f32),
+                graphics::Rect::new(x, y, CASE_SIZE, CASE_SIZE),
                 case_color(case),
               )?;
-              graphics::draw(ctx, &mesh_case, (na::Point2::new(left, top),))?;
+              graphics::draw(ctx, &mesh_case, (na::Point2::new(self.grid_rect.x, self.grid_rect.y),))?;
             }
           }
         }
@@ -280,8 +287,7 @@ impl event::EventHandler for MainState {
   fn key_down_event(&mut self, _ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
         event::KeyCode::R => {
-          let mut r = rand::thread_rng();
-          let case = r.gen_range(CASE_RED, CASE_CYAN + 1);
+          let case = rand::random();
           self.current_piece = Some(generate_piece(case));
         }
         _ => (),
