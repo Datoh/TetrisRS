@@ -10,7 +10,7 @@ use ggez::{Context, GameResult};
 
 use rand::{ distributions::{Distribution, Standard}, Rng};
 
-const INITIAL_SPEED_MOVE: Duration = Duration::from_secs(1);
+const INITIAL_SPEED_MOVE: Duration = Duration::from_millis(100);
 
 const GRID_WIDTH: usize = 10;
 const GRID_HEIGHT: usize = 20;
@@ -109,7 +109,7 @@ impl Piece {
   }
 }
 
-fn generate_piece(case: Case) -> Piece {
+fn create_piece(case: Case) -> Piece {
   let cases = piece_cases(case);
   return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as i32, y: 0, last_move: Duration::from_secs(0), cases: cases };
 }
@@ -119,6 +119,7 @@ struct MainState {
   grid_rect: graphics::Rect,
   current_piece: Option<Piece>,
   move_speed: Duration,
+  timer_piece_generation: Duration,
 }
 
 impl MainState {
@@ -133,6 +134,7 @@ impl MainState {
       grid_rect: graphics::Rect::new(left, top, width, height),
       current_piece: None,
       move_speed: INITIAL_SPEED_MOVE,
+      timer_piece_generation: Duration::from_secs(0),
     };
     Ok(s)
   }
@@ -177,6 +179,40 @@ impl MainState {
     return false;
   }
 
+  fn remove_complete_lines(&mut self) {
+    for y in 0..GRID_HEIGHT {
+      let mut all_in_line = true;
+      for x in 0..GRID_WIDTH {
+        all_in_line &= self.grid[x][y] != Case::Empty;
+      }
+      if all_in_line {
+        let mut y_to_move = (y -1) as i32;
+        while y_to_move >= 0 {
+          for x in 0..GRID_WIDTH {
+            self.grid[x][y_to_move as usize + 1] = self.grid[x][y_to_move as usize];
+          }
+          y_to_move -= 1;
+        }
+      }
+    }
+  }
+
+  fn generate_piece(&mut self, delta: Duration) -> bool {
+    if self.current_piece.is_some() {
+      return true;
+    }
+
+    self.timer_piece_generation += delta;
+    if self.timer_piece_generation > self.move_speed {
+      self.timer_piece_generation = Duration::from_secs(0);
+      let case = rand::random();
+      self.current_piece = Some(create_piece(case));
+
+      return !self.piece_check_collision(0, 0);
+    }
+    return true;
+  }
+
   fn piece_move_horizontally(&mut self, dx: i32) {
     if self.current_piece.is_none() {
       return;
@@ -199,9 +235,9 @@ impl MainState {
     }
   }
 
-  fn piece_move_down(&mut self, delta: Duration) {
+  fn piece_move_down(&mut self, delta: Duration) -> bool {
     if self.current_piece.is_none() {
-      return;
+      return false;
     }
 
     let dy: i32 = 1;
@@ -220,6 +256,7 @@ impl MainState {
       let piece = self.current_piece.as_mut().unwrap();
       piece.last_move += delta;
     }
+    return should_move && !can_move;
   }
 
   fn draw_grid(&mut self, ctx: &mut Context) -> GameResult {
@@ -304,16 +341,26 @@ impl MainState {
 impl event::EventHandler for MainState {
   fn update(&mut self, ctx: &mut Context) -> GameResult {
     let delta = timer::delta(ctx);
-    self.piece_move_down(delta);
+
+    let end = !self.generate_piece(delta);
+    let piece_is_done = !end && self.piece_move_down(delta);
+    
+    if piece_is_done {
+      self.remove_complete_lines();
+    }
+
+    if end {
+      self.grid = [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH];
+      self.current_piece = None;
+      self.move_speed = INITIAL_SPEED_MOVE;
+      self.timer_piece_generation = Duration::from_secs(0);
+    }
+
     Ok(())
   }
 
   fn key_down_event(&mut self, _ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
-        event::KeyCode::R => {
-          let case = rand::random();
-          self.current_piece = Some(generate_piece(case));
-        }
         event::KeyCode::Left => {
           self.piece_move_horizontally(-1);
         }
