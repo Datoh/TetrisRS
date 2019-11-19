@@ -85,6 +85,15 @@ struct Piece {
   cases: Vec<Vec<Case>>,
 }
 
+impl Piece {
+  fn width(&mut self) -> u32 {
+    return self.cases[0].len() as u32;
+  }
+  fn height(&mut self) -> u32 {
+    return self.cases.len() as u32;
+  }
+}
+
 fn generate_piece(case: Case) -> Piece {
   let cases = piece_cases(case);
   return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as u32, y: 0, last_move: Duration::from_secs(0), cases: cases };
@@ -104,6 +113,21 @@ impl MainState {
       move_speed: INITIAL_SPEED_MOVE,
     };
     Ok(s)
+  }
+
+  fn put_piece_in_grid(&mut self) -> GameResult {
+    let piece = self.current_piece.as_ref().unwrap();
+    for (i_v_y, line) in piece.cases.iter().enumerate() {
+      let i_y = piece.y as usize + i_v_y;
+      for (i_v_x, case) in line.iter().enumerate() {
+        if *case != CASE_NONE {
+          let i_x = piece.x as usize + i_v_x;
+          self.grid[i_x][i_y] = *case;
+        }
+      }
+    }
+
+    Ok(())
   }
 
   fn draw_grid(&mut self, ctx: &mut Context) -> GameResult {
@@ -202,16 +226,25 @@ impl MainState {
 
 impl event::EventHandler for MainState {
   fn update(&mut self, ctx: &mut Context) -> GameResult {
+    let mut is_arrived = false;
     match &mut self.current_piece {
       Some(piece) => {
         piece.last_move += timer::delta(ctx);
         if piece.last_move > self.move_speed {
-          piece.y += 1;
           piece.last_move = Duration::from_secs(0);
+          piece.y += 1;
+          if piece.y + piece.height() > GRID_HEIGHT as u32 {
+            piece.y -= 1;
+            is_arrived = true;
+          }
         }
       }
       None => {},
     };
+    if is_arrived {
+      self.put_piece_in_grid()?;
+      self.current_piece = None;
+    }
     Ok(())
   }
 
