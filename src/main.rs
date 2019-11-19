@@ -10,7 +10,7 @@ use ggez::{Context, GameResult};
 
 use rand::Rng;
 
-const INITIAL_SPEED_MOVE: Duration = Duration::from_secs(1);
+const INITIAL_SPEED_MOVE: Duration = Duration::from_millis(300);
 
 const GRID_WIDTH: usize = 10;
 const GRID_HEIGHT: usize = 20;
@@ -86,10 +86,10 @@ struct Piece {
 }
 
 impl Piece {
-  fn width(&mut self) -> u32 {
+  fn width(&self) -> u32 {
     return self.cases[0].len() as u32;
   }
-  fn height(&mut self) -> u32 {
+  fn height(&self) -> u32 {
     return self.cases.len() as u32;
   }
 }
@@ -115,7 +115,7 @@ impl MainState {
     Ok(s)
   }
 
-  fn put_piece_in_grid(&mut self) -> GameResult {
+  fn put_piece_in_grid(&mut self) {
     let piece = self.current_piece.as_ref().unwrap();
     for (i_v_y, line) in piece.cases.iter().enumerate() {
       let i_y = piece.y as usize + i_v_y;
@@ -126,8 +126,54 @@ impl MainState {
         }
       }
     }
+  }
 
-    Ok(())
+  fn piece_check_collision(&self, dx: i32, dy: i32) -> bool {
+    let piece = self.current_piece.as_ref().unwrap();
+
+    if piece.y + (dy as u32) + piece.height() > GRID_HEIGHT as u32 {
+      return true;
+    }
+    if ((piece.x as i32 + dx) as i32) < 0 || piece.x + (dx as u32) + piece.width() > GRID_HEIGHT as u32 {
+      return true;
+    }
+
+    for (i_v_y, line) in piece.cases.iter().enumerate() {
+      let i_y = (piece.y as i32 + dy) as usize + i_v_y;
+      for (i_v_x, &case) in line.iter().enumerate() {
+        if case != CASE_NONE {
+          let i_x = (piece.x as i32 + dx) as usize + i_v_x;
+          if self.grid[i_x][i_y] != CASE_NONE {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  fn piece_move_down(&mut self, delta: Duration) {
+    if self.current_piece.is_none() {
+      return;
+    }
+
+    let dy: i32 = 1;
+    let piece = self.current_piece.as_ref().unwrap();
+    let should_move = piece.last_move + delta > self.move_speed;
+    let can_move = should_move && !self.piece_check_collision(0, dy);
+
+    if should_move && !can_move {
+      self.put_piece_in_grid();
+      self.current_piece = None;
+    } else if should_move && can_move {
+      let piece = self.current_piece.as_mut().unwrap();
+      piece.y += dy as u32;
+      piece.last_move = Duration::from_secs(0);
+    } else {
+      let piece = self.current_piece.as_mut().unwrap();
+      piece.last_move += delta;
+    }
   }
 
   fn draw_grid(&mut self, ctx: &mut Context) -> GameResult {
@@ -193,7 +239,7 @@ impl MainState {
 
   fn draw_current_piece(&mut self, ctx: &mut Context) -> GameResult {
     match &self.current_piece {
-      Some(piece) => {
+      Some (piece) => {
         let width = ((GRID_WIDTH as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
         let height = ((GRID_HEIGHT as u32) * (CASE_SIZE + 2 * CASE_BORDER)) as f32;
         let left = (800.0 - width as f32) / 2.0;
@@ -202,15 +248,15 @@ impl MainState {
         for (i_v_y, line) in piece.cases.iter().enumerate() {
           let i_y = piece.y + i_v_y as u32;
           let y = (i_y * (CASE_SIZE + CASE_BORDER * 2) + CASE_BORDER) as f32;
-          for (i_v_x, case) in line.iter().enumerate() {
-            if *case != CASE_NONE {
+          for (i_v_x, &case) in line.iter().enumerate() {
+            if case != CASE_NONE {
               let i_x = piece.x + i_v_x as u32;
               let x = (i_x * (CASE_SIZE + CASE_BORDER * 2) + CASE_BORDER) as f32;
               let mesh_case = graphics::Mesh::new_rectangle(
                 ctx, 
                 graphics::DrawMode::fill(),
                 graphics::Rect::new(x, y, CASE_SIZE as f32, CASE_SIZE as f32),
-                case_color(*case),
+                case_color(case),
               )?;
               graphics::draw(ctx, &mesh_case, (na::Point2::new(left, top),))?;
             }
@@ -226,25 +272,8 @@ impl MainState {
 
 impl event::EventHandler for MainState {
   fn update(&mut self, ctx: &mut Context) -> GameResult {
-    let mut is_arrived = false;
-    match &mut self.current_piece {
-      Some(piece) => {
-        piece.last_move += timer::delta(ctx);
-        if piece.last_move > self.move_speed {
-          piece.last_move = Duration::from_secs(0);
-          piece.y += 1;
-          if piece.y + piece.height() > GRID_HEIGHT as u32 {
-            piece.y -= 1;
-            is_arrived = true;
-          }
-        }
-      }
-      None => {},
-    };
-    if is_arrived {
-      self.put_piece_in_grid()?;
-      self.current_piece = None;
-    }
+    let delta = timer::delta(ctx);
+    self.piece_move_down(delta);
     Ok(())
   }
 
