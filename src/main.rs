@@ -188,6 +188,17 @@ impl MainState {
     }
   }
 
+  fn piece_drop(&mut self) {
+    if self.current_piece.is_none() {
+      return;
+    }
+    let dy = 1;
+    while !self.piece_check_collision(0, dy) {
+      let piece = self.current_piece.as_mut().unwrap();
+      piece.y += dy;
+    }
+  }
+
   fn piece_move_down(&mut self, delta: Duration) {
     if self.current_piece.is_none() {
       return;
@@ -308,6 +319,9 @@ impl event::EventHandler for MainState {
         }
         event::KeyCode::Right => {
           self.piece_move_horizontally(1);
+        }
+        event::KeyCode::Down => {
+          self.piece_drop();
         }
           _ => (),
     }
