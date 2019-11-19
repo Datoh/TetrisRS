@@ -94,24 +94,24 @@ fn piece_cases(case: Case) -> Vec<Vec<Case>> {
 }
 
 struct Piece {
-  x: u32,
-  y: u32,
+  x: i32,
+  y: i32,
   last_move: Duration,
   cases: Vec<Vec<Case>>,
 }
 
 impl Piece {
-  fn width(&self) -> u32 {
-    return self.cases[0].len() as u32;
+  fn width(&self) -> i32 {
+    return self.cases[0].len() as i32;
   }
-  fn height(&self) -> u32 {
-    return self.cases.len() as u32;
+  fn height(&self) -> i32 {
+    return self.cases.len() as i32;
   }
 }
 
 fn generate_piece(case: Case) -> Piece {
   let cases = piece_cases(case);
-  return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as u32, y: 0, last_move: Duration::from_secs(0), cases: cases };
+  return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as i32, y: 0, last_move: Duration::from_secs(0), cases: cases };
 }
 
 struct MainState {
@@ -152,19 +152,21 @@ impl MainState {
 
   fn piece_check_collision(&self, dx: i32, dy: i32) -> bool {
     let piece = self.current_piece.as_ref().unwrap();
+    let piece_x = piece.x + dx;
+    let piece_y = piece.y + dy;
 
-    if piece.y + (dy as u32) + piece.height() > GRID_HEIGHT as u32 {
+    if piece_y + piece.height() > GRID_HEIGHT as i32 {
       return true;
     }
-    if ((piece.x as i32 + dx) as i32) < 0 || piece.x + (dx as u32) + piece.width() > GRID_HEIGHT as u32 {
+    if piece_x < 0 || piece_x + piece.width() > GRID_WIDTH as i32 {
       return true;
     }
 
     for (i_v_y, line) in piece.cases.iter().enumerate() {
-      let i_y = (piece.y as i32 + dy) as usize + i_v_y;
+      let i_y = piece_y as usize + i_v_y;
       for (i_v_x, &case) in line.iter().enumerate() {
         if case != Case::Empty {
-          let i_x = (piece.x as i32 + dx) as usize + i_v_x;
+          let i_x = piece_x as usize + i_v_x;
           if self.grid[i_x][i_y] != Case::Empty {
             return true;
           }
@@ -173,6 +175,17 @@ impl MainState {
     }
 
     return false;
+  }
+
+  fn piece_move_horizontally(&mut self, dx: i32) {
+    if self.current_piece.is_none() {
+      return;
+    }
+
+    if !self.piece_check_collision(dx, 0) {
+      let piece = self.current_piece.as_mut().unwrap();
+      piece.x += dx;
+    }
   }
 
   fn piece_move_down(&mut self, delta: Duration) {
@@ -190,7 +203,7 @@ impl MainState {
       self.current_piece = None;
     } else if should_move && can_move {
       let piece = self.current_piece.as_mut().unwrap();
-      piece.y += dy as u32;
+      piece.y += dy;
       piece.last_move = Duration::from_secs(0);
     } else {
       let piece = self.current_piece.as_mut().unwrap();
@@ -253,11 +266,11 @@ impl MainState {
     match &self.current_piece {
       Some (piece) => {
         for (i_v_y, line) in piece.cases.iter().enumerate() {
-          let i_y = piece.y + i_v_y as u32;
+          let i_y = piece.y + i_v_y as i32;
           let y = (i_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
           for (i_v_x, &case) in line.iter().enumerate() {
             if case != Case::Empty {
-              let i_x = piece.x + i_v_x as u32;
+              let i_x = piece.x + i_v_x as i32;
               let x = (i_x as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
               let mesh_case = graphics::Mesh::new_rectangle(
                 ctx, 
@@ -290,7 +303,13 @@ impl event::EventHandler for MainState {
           let case = rand::random();
           self.current_piece = Some(generate_piece(case));
         }
-        _ => (),
+        event::KeyCode::Left => {
+          self.piece_move_horizontally(-1);
+        }
+        event::KeyCode::Right => {
+          self.piece_move_horizontally(1);
+        }
+          _ => (),
     }
   }
 
