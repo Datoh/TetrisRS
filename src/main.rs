@@ -1,11 +1,16 @@
+use std::time::Duration;
+
 use ggez;
 use ggez::conf;
 use ggez::event;
 use ggez::graphics;
 use ggez::nalgebra as na;
+use ggez::timer;
 use ggez::{Context, GameResult};
 
 use rand::Rng;
+
+const INITIAL_SPEED_MOVE: Duration = Duration::from_secs(1);
 
 const GRID_WIDTH: usize = 10;
 const GRID_HEIGHT: usize = 20;
@@ -76,22 +81,28 @@ fn piece_cases(case: Case) -> Vec<Vec<Case>> {
 struct Piece {
   x: u32,
   y: u32,
+  last_move: Duration,
   cases: Vec<Vec<Case>>,
 }
 
 fn generate_piece(case: Case) -> Piece {
   let cases = piece_cases(case);
-  return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as u32, y: 0, cases: cases };
+  return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as u32, y: 0, last_move: Duration::from_secs(0), cases: cases };
 }
 
 struct MainState {
   grid: [[Case; GRID_HEIGHT]; GRID_WIDTH],
   current_piece: Option<Piece>,
+  move_speed: Duration,
 }
 
 impl MainState {
   fn new() -> GameResult<MainState> {
-    let s = MainState { grid: [[CASE_NONE; GRID_HEIGHT]; GRID_WIDTH], current_piece: None };
+    let s = MainState {
+      grid: [[CASE_NONE; GRID_HEIGHT]; GRID_WIDTH],
+      current_piece: None,
+      move_speed: INITIAL_SPEED_MOVE,
+    };
     Ok(s)
   }
 
@@ -190,7 +201,17 @@ impl MainState {
 }
 
 impl event::EventHandler for MainState {
-  fn update(&mut self, _ctx: &mut Context) -> GameResult {
+  fn update(&mut self, ctx: &mut Context) -> GameResult {
+    match &mut self.current_piece {
+      Some(piece) => {
+        piece.last_move += timer::delta(ctx);
+        if piece.last_move > self.move_speed {
+          piece.y += 1;
+          piece.last_move = Duration::from_secs(0);
+        }
+      }
+      None => {},
+    };
     Ok(())
   }
 
