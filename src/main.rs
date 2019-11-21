@@ -57,6 +57,22 @@ fn case_color(case: Case) -> graphics::Color {
   };
 }
 
+#[derive(Clone,Copy)]
+struct Offset {
+  x: i32,
+  y: i32,
+}
+const ROTATION_OFFSET_DEFAULT: [Offset; 4] = [Offset { x: 1, y: 0}, Offset { x: -1, y: 1}, Offset { x: 0, y: -1}, Offset { x: 0, y: 0}, ];
+const ROTATION_OFFSET_CYAN: [Offset; 4] = [Offset { x: 2, y: -1}, Offset { x: -2, y: 2}, Offset { x: 1, y: -2}, Offset { x: -1, y: 1}, ];
+
+fn cases_rotation_offset(case: Case, index: usize) -> Offset {
+  return match case {
+    Case::DarkYellow => Offset { x: 0, y: 0},
+    Case::Cyan => ROTATION_OFFSET_CYAN[index],
+    _ => ROTATION_OFFSET_DEFAULT[index],
+  };
+}
+
 fn piece_cases(case: Case) -> Vec<Vec<Case>> {
   return match case {
     Case::Red => vec![
@@ -84,20 +100,19 @@ fn piece_cases(case: Case) -> Vec<Vec<Case>> {
       vec![Case::Purple, Case::Purple, Case::Purple], 
     ],
     Case::Cyan => vec![
-      vec![Case::Cyan],
-      vec![Case::Cyan],
-      vec![Case::Cyan],
-      vec![Case::Cyan],
+      vec![Case::Cyan, Case::Cyan, Case::Cyan, Case::Cyan],
     ],
     _ => panic!("Unknow case type"),
   };
 }
 
 struct Piece {
+  case: Case,
   x: i32,
   y: i32,
   last_move: Duration,
   cases: Vec<Vec<Case>>,
+  index_rotation: usize,
 }
 
 impl Piece {
@@ -111,7 +126,33 @@ impl Piece {
 
 fn create_piece(case: Case) -> Piece {
   let cases = piece_cases(case);
-  return Piece { x: ((GRID_WIDTH - cases[0].len()) / 2) as i32, y: 0, last_move: Duration::from_secs(0), cases: cases };
+  return Piece { case: case, x: ((GRID_WIDTH - cases[0].len()) / 2) as i32, y: 0, last_move: Duration::from_secs(0), cases: cases, index_rotation: 0 };
+}
+
+fn check_collision(grid: &[[Case; GRID_HEIGHT]; GRID_WIDTH], piece: &Piece, dx: i32, dy: i32) -> bool {
+  let piece_x = piece.x + dx;
+  let piece_y = piece.y + dy;
+
+  if piece_y + piece.height() > GRID_HEIGHT as i32 {
+    return true;
+  }
+  if piece_x < 0 || piece_x + piece.width() > GRID_WIDTH as i32 {
+    return true;
+  }
+
+  for (i_v_y, line) in piece.cases.iter().enumerate() {
+    let i_y = piece_y as usize + i_v_y;
+    for (i_v_x, &case) in line.iter().enumerate() {
+      if case != Case::Empty {
+        let i_x = piece_x as usize + i_v_x;
+        if grid[i_x][i_y] != Case::Empty {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 struct MainState {
@@ -139,6 +180,49 @@ impl MainState {
     Ok(s)
   }
 
+  fn rotate(&mut self) {
+    if self.current_piece.is_none() {
+      return;
+    }
+
+    let old_piece = self.current_piece.as_ref().unwrap();
+    let mut tmp_cases: Vec<Vec<Case>> = Vec::new();
+    let height = old_piece.cases.len();
+    let width = old_piece.cases[0].len();
+    for x in 0..width {
+      let mut current_row: Vec<Case> = Vec::new();
+      for y in 0..height {
+        current_row.push(old_piece.cases[y][x]);
+      }
+      current_row.reverse();
+      tmp_cases.push(current_row);
+    }
+    let mut piece = Piece { case: old_piece.case, x: old_piece.x, y: old_piece.y, last_move: old_piece.last_move, cases: tmp_cases, index_rotation: old_piece.index_rotation };
+    let offset = cases_rotation_offset(piece.case, piece.index_rotation);
+    piece.x += offset.x;
+    piece.y += offset.y;
+    piece.y = piece.y.max(0);
+    piece.index_rotation = (piece.index_rotation + 1) % 4;
+
+    let mut ok = !check_collision(&self.grid, &piece, 0, 0);
+    if !ok {
+      piece.x -= 1;
+      ok = !check_collision(&self.grid, &piece, 0, 0);
+    }
+    if !ok {
+      piece.x += 2;
+      ok = !check_collision(&self.grid, &piece, 0, 0);
+    }
+    if !ok {
+      piece.x -= 1;
+      piece.y -= 1;
+      ok = !check_collision(&self.grid, &piece, 0, 0);
+    }
+    if ok {
+      self.current_piece = Some(piece);
+    }
+  }
+
   fn put_piece_in_grid(&mut self) {
     let piece = self.current_piece.as_ref().unwrap();
     for (i_v_y, line) in piece.cases.iter().enumerate() {
@@ -150,33 +234,6 @@ impl MainState {
         }
       }
     }
-  }
-
-  fn piece_check_collision(&self, dx: i32, dy: i32) -> bool {
-    let piece = self.current_piece.as_ref().unwrap();
-    let piece_x = piece.x + dx;
-    let piece_y = piece.y + dy;
-
-    if piece_y + piece.height() > GRID_HEIGHT as i32 {
-      return true;
-    }
-    if piece_x < 0 || piece_x + piece.width() > GRID_WIDTH as i32 {
-      return true;
-    }
-
-    for (i_v_y, line) in piece.cases.iter().enumerate() {
-      let i_y = piece_y as usize + i_v_y;
-      for (i_v_x, &case) in line.iter().enumerate() {
-        if case != Case::Empty {
-          let i_x = piece_x as usize + i_v_x;
-          if self.grid[i_x][i_y] != Case::Empty {
-            return true;
-          }
-        }
-      }
-    }
-
-    return false;
   }
 
   fn remove_complete_lines(&mut self) {
@@ -206,9 +263,10 @@ impl MainState {
     if self.timer_piece_generation > self.move_speed {
       self.timer_piece_generation = Duration::from_secs(0);
       let case = rand::random();
-      self.current_piece = Some(create_piece(case));
-
-      return !self.piece_check_collision(0, 0);
+      let piece = create_piece(case);
+      let fit_in_grid = !check_collision(&self.grid, &piece, 0, 0);
+      self.current_piece = Some(piece);
+      return fit_in_grid;
     }
     return true;
   }
@@ -218,8 +276,8 @@ impl MainState {
       return;
     }
 
-    if !self.piece_check_collision(dx, 0) {
-      let piece = self.current_piece.as_mut().unwrap();
+    let piece = self.current_piece.as_mut().unwrap();
+    if !check_collision(&self.grid, piece, dx, 0) {
       piece.x += dx;
     }
   }
@@ -228,10 +286,10 @@ impl MainState {
     if self.current_piece.is_none() {
       return;
     }
-    let dy = 1;
-    while !self.piece_check_collision(0, dy) {
-      let piece = self.current_piece.as_mut().unwrap();
-      piece.y += dy;
+
+    let piece = self.current_piece.as_mut().unwrap();
+    while !check_collision(&self.grid, piece, 0, 1) {
+      piece.y += 1;
     }
   }
 
@@ -243,7 +301,7 @@ impl MainState {
     let dy: i32 = 1;
     let piece = self.current_piece.as_ref().unwrap();
     let should_move = piece.last_move + delta > self.move_speed;
-    let can_move = should_move && !self.piece_check_collision(0, dy);
+    let can_move = should_move && !check_collision(&self.grid, piece, 0, dy);
 
     if should_move && !can_move {
       self.put_piece_in_grid();
@@ -369,6 +427,9 @@ impl event::EventHandler for MainState {
         }
         event::KeyCode::Down => {
           self.piece_drop();
+        }
+        event::KeyCode::Up => {
+          self.rotate();
         }
           _ => (),
     }
