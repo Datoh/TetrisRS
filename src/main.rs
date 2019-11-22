@@ -461,19 +461,11 @@ impl event::EventHandler for MainState {
 
   fn key_down_event(&mut self, _ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
-        event::KeyCode::Left => {
-          self.piece_move_horizontally(-1);
-        }
-        event::KeyCode::Right => {
-          self.piece_move_horizontally(1);
-        }
-        event::KeyCode::Down => {
-          self.piece_drop();
-        }
-        event::KeyCode::Up => {
-          self.rotate();
-        }
-          _ => (),
+      event::KeyCode::Left => self.piece_move_horizontally(-1),
+      event::KeyCode::Right => self.piece_move_horizontally(1),
+      event::KeyCode::Down => self.piece_drop(),
+      event::KeyCode::Up => self.rotate(),
+      _ => (),
     }
   }
 
