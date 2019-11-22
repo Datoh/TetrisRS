@@ -10,8 +10,6 @@ use ggez::{Context, GameResult};
 
 use rand::{ distributions::{Distribution, Standard}, Rng};
 
-const INITIAL_SPEED_MOVE: Duration = Duration::from_millis(100);
-
 const GRID_WIDTH: usize = 10;
 const GRID_HEIGHT: usize = 20;
 
@@ -155,12 +153,20 @@ fn check_collision(grid: &[[Case; GRID_HEIGHT]; GRID_WIDTH], piece: &Piece, dx: 
   return false;
 }
 
+fn drop_speed(level: u32) -> Duration {
+  let level_f64 = (level - 1) as f64;
+  Duration::from_secs_f64((0.8 - (level_f64 * 0.007)).powf(level_f64))
+}
+
 struct MainState {
   grid: [[Case; GRID_HEIGHT]; GRID_WIDTH],
   grid_rect: graphics::Rect,
   current_piece: Option<Piece>,
   move_speed: Duration,
   timer_piece_generation: Duration,
+  score: i64,
+  level: u32,
+  line_removed: u32,
 }
 
 impl MainState {
@@ -174,8 +180,11 @@ impl MainState {
       grid: [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH],
       grid_rect: graphics::Rect::new(left, top, width, height),
       current_piece: None,
-      move_speed: INITIAL_SPEED_MOVE,
+      move_speed: drop_speed(1),
       timer_piece_generation: Duration::from_secs(0),
+      score: 0,
+      level: 1,
+      line_removed: 0,
     };
     Ok(s)
   }
@@ -236,13 +245,15 @@ impl MainState {
     }
   }
 
-  fn remove_complete_lines(&mut self) {
+  fn remove_complete_lines(&mut self) -> u32 {
+    let mut line_removed: u32 = 0;
     for y in 0..GRID_HEIGHT {
       let mut all_in_line = true;
       for x in 0..GRID_WIDTH {
         all_in_line &= self.grid[x][y] != Case::Empty;
       }
       if all_in_line {
+        line_removed += 1;
         let mut y_to_move = (y -1) as i32;
         while y_to_move >= 0 {
           for x in 0..GRID_WIDTH {
@@ -251,6 +262,29 @@ impl MainState {
           y_to_move -= 1;
         }
       }
+    }
+
+    return line_removed;
+  }
+
+  fn compute_score(&mut self, line_removed: u32) {
+    let factor = match line_removed {
+      1 => 40,
+      2 => 100,
+      3 => 300,
+      4 => 1200,
+      _ => 0,
+    };
+    self.score += factor * (self.level as i64);
+    println!("Score: {}", self.score);
+  }
+
+  fn increase_level(&mut self) {
+    if self.line_removed > self.level * 5 {
+      self.level += 1;
+      self.move_speed = drop_speed(self.level);
+      println!("Level: {}", self.level);
+      println!("Speed: {:?}", self.move_speed);
     }
   }
 
@@ -404,14 +438,22 @@ impl event::EventHandler for MainState {
     let piece_is_done = !end && self.piece_move_down(delta);
     
     if piece_is_done {
-      self.remove_complete_lines();
+      let line_removed = self.remove_complete_lines();
+      if line_removed > 0 {
+        self.compute_score(line_removed);
+        self.line_removed += line_removed;
+        self.increase_level();
+      }
     }
 
     if end {
       self.grid = [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH];
       self.current_piece = None;
-      self.move_speed = INITIAL_SPEED_MOVE;
+      self.move_speed = drop_speed(1);
       self.timer_piece_generation = Duration::from_secs(0);
+      self.level = 1;
+      self.score = 0;
+      self.line_removed = 0;
     }
 
     Ok(())
