@@ -13,7 +13,8 @@
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],
-      "externalConsole": false
+      "externalConsole": false,
+      "preLaunchTask": "cargo build (debug)",
     }
   ]
 }
