@@ -46,6 +46,8 @@ const CASE_BORDER: f32 = 2.0;
 const FONT_NAME: &str = "/DejaVuSerif.ttf";
 const FONT_SIZE: f32 = 18.0;
 
+const NEXT_PIECES_COUNT: usize = 3;
+
 fn case_color(case: Case) -> graphics::Color {
   return match case {
     Case::Red => graphics::Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
@@ -163,9 +165,11 @@ fn drop_speed(level: u32) -> Duration {
 }
 
 struct MainState {
+  frame: graphics::Rect,
   grid: [[Case; GRID_HEIGHT]; GRID_WIDTH],
   grid_rect: graphics::Rect,
   current_piece: Option<Piece>,
+  next_pieces: Vec<Piece>,
   move_speed: Duration,
   timer_piece_generation: Duration,
   score: i64,
@@ -178,25 +182,45 @@ impl MainState {
   fn new(ctx: &mut Context) -> GameResult<MainState> {
     let width = (GRID_WIDTH as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
     let height = (GRID_HEIGHT as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
-    let left = (800.0 - width) / 2.0;
-    let top = (600.0 - height) / 2.0;
+    let frame = graphics::screen_coordinates(ctx);
+    let left = (frame.w - width) / 2.0;
+    let top = (frame.h - height) / 2.0;
 
     let font = graphics::Font::new(ctx, FONT_NAME)?;
-    let text = format!("Level: {}\n\nScore: {}\n\nLines: {}", 1, 0, 0);
 
-    let s = MainState { 
+    let mut s = MainState {
+      frame: frame,
       grid: [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH],
       grid_rect: graphics::Rect::new(left, top, width, height),
       current_piece: None,
-      move_speed: drop_speed(1),
+      next_pieces: Vec::new(),
+      move_speed: Duration::from_secs(0),
       timer_piece_generation: Duration::from_secs(0),
       score: 0,
-      level: 1,
+      level: 0,
       line_removed: 0,
-      text: graphics::Text::new((text, font, FONT_SIZE)),
+      text: graphics::Text::new(("", font, FONT_SIZE)),
     };
 
+    s.reset(ctx)?;
+
     Ok(s)
+  }
+
+  fn reset(&mut self, ctx: &mut Context) -> GameResult {
+    self.grid = [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH];
+    self.current_piece = None;
+    self.move_speed = drop_speed(1);
+    self.timer_piece_generation = Duration::from_secs(0);
+    self.level = 1;
+    self.score = 0;
+    self.line_removed = 0;
+    self.create_score_text(ctx)?;
+    self.next_pieces.clear();
+    for _ in 0..NEXT_PIECES_COUNT {
+      self.next_pieces.push(create_piece(rand::random()));
+    }
+    Ok(())
   }
 
   fn rotate(&mut self) {
@@ -305,11 +329,13 @@ impl MainState {
 
     self.timer_piece_generation += delta;
     if self.timer_piece_generation > self.move_speed {
+      let piece = self.next_pieces.remove(0);
       self.timer_piece_generation = Duration::from_secs(0);
-      let case = rand::random();
-      let piece = create_piece(case);
       let fit_in_grid = !check_collision(&self.grid, &piece, 0, 0);
       self.current_piece = Some(piece);
+
+      self.next_pieces.push(create_piece(rand::random()));
+
       return fit_in_grid;
     }
     return true;
@@ -421,7 +447,7 @@ impl MainState {
   }
 
   fn draw_score(&mut self, ctx: &mut Context) -> GameResult {
-    graphics::draw(ctx, &self.text, (na::Point2::new(50.0, 200.0),))?;
+    graphics::draw(ctx, &self.text, (na::Point2::new(self.grid_rect.x / 4.0, self.frame.h / 4.0),))?;
 
     Ok(())
   }
@@ -452,6 +478,32 @@ impl MainState {
 
     Ok(())
   }
+
+  fn draw_next_pieces(&self, ctx: &mut Context) -> GameResult {
+    let global_x = self.grid_rect.x + self.grid_rect.w + (self.grid_rect.x / 2.0);
+    let mut global_y = self.frame.h / 4.0;
+    for piece in &self.next_pieces {
+      for (i_y, line) in piece.cases.iter().enumerate() {
+        let y = (i_y as f32) * (CASE_SIZE + (CASE_BORDER * 2.0));
+        let piece_x = global_x - (line.len() as f32 * (CASE_SIZE + (CASE_BORDER * 2.0)) / 2.0);
+        for (i_x, &case) in line.iter().enumerate() {
+          if case != Case::Empty {
+            let x = (i_x as f32) * (CASE_SIZE + (CASE_BORDER * 2.0));
+            let mesh_case = graphics::Mesh::new_rectangle(
+              ctx,
+              graphics::DrawMode::fill(),
+              graphics::Rect::new(x, y, CASE_SIZE, CASE_SIZE),
+              case_color(case),
+            )?;
+            graphics::draw(ctx, &mesh_case, (na::Point2::new(piece_x, global_y),))?;
+          }
+        }
+      }
+      global_y += 100.0;
+    }
+
+    Ok(())
+  }
 }
 
 impl event::EventHandler for MainState {
@@ -472,14 +524,7 @@ impl event::EventHandler for MainState {
     }
 
     if end {
-      self.grid = [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH];
-      self.current_piece = None;
-      self.move_speed = drop_speed(1);
-      self.timer_piece_generation = Duration::from_secs(0);
-      self.level = 1;
-      self.score = 0;
-      self.line_removed = 0;
-      self.create_score_text(ctx)?;
+      self.reset(ctx)?;
     }
 
     Ok(())
@@ -502,6 +547,7 @@ impl event::EventHandler for MainState {
     self.draw_case(ctx)?;
     self.draw_current_piece(ctx)?;
     self.draw_score(ctx)?;
+    self.draw_next_pieces(ctx)?;
 
     graphics::present(ctx)?;
     Ok(())
