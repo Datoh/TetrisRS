@@ -1,3 +1,4 @@
+use std::path;
 use std::time::Duration;
 
 use ggez;
@@ -41,6 +42,9 @@ impl Distribution<Case> for Standard {
 }
 const CASE_SIZE:   f32 = 20.0;
 const CASE_BORDER: f32 = 2.0;
+
+const FONT_NAME: &str = "/DejaVuSerif.ttf";
+const FONT_SIZE: f32 = 18.0;
 
 fn case_color(case: Case) -> graphics::Color {
   return match case {
@@ -167,16 +171,20 @@ struct MainState {
   score: i64,
   level: u32,
   line_removed: u32,
+  text: graphics::Text,
 }
 
 impl MainState {
-  fn new() -> GameResult<MainState> {
+  fn new(ctx: &mut Context) -> GameResult<MainState> {
     let width = (GRID_WIDTH as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
     let height = (GRID_HEIGHT as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
     let left = (800.0 - width) / 2.0;
     let top = (600.0 - height) / 2.0;
 
-    let s = MainState {
+    let font = graphics::Font::new(ctx, FONT_NAME)?;
+    let text = format!("Level: {}\n\nScore: {}\n\nLines: {}", 1, 0, 0);
+
+    let s = MainState { 
       grid: [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH],
       grid_rect: graphics::Rect::new(left, top, width, height),
       current_piece: None,
@@ -185,7 +193,9 @@ impl MainState {
       score: 0,
       level: 1,
       line_removed: 0,
+      text: graphics::Text::new((text, font, FONT_SIZE)),
     };
+
     Ok(s)
   }
 
@@ -402,6 +412,20 @@ impl MainState {
     Ok(())
   }
 
+  fn create_score_text(&mut self, ctx: &mut Context) -> GameResult {
+    let font = graphics::Font::new(ctx, FONT_NAME)?;
+    let text = format!("Level: {}\n\nScore: {}\n\nLines: {}", self.level, self.score, self.line_removed);
+    self.text = graphics::Text::new((text, font, FONT_SIZE));
+
+    Ok(())
+  }
+
+  fn draw_score(&mut self, ctx: &mut Context) -> GameResult {
+    graphics::draw(ctx, &self.text, (na::Point2::new(50.0, 200.0),))?;
+
+    Ok(())
+  }
+
   fn draw_current_piece(&mut self, ctx: &mut Context) -> GameResult {
     match &self.current_piece {
       Some (piece) => {
@@ -443,6 +467,7 @@ impl event::EventHandler for MainState {
         self.compute_score(line_removed);
         self.line_removed += line_removed;
         self.increase_level();
+        self.create_score_text(ctx)?;
       }
     }
 
@@ -454,6 +479,7 @@ impl event::EventHandler for MainState {
       self.level = 1;
       self.score = 0;
       self.line_removed = 0;
+      self.create_score_text(ctx)?;
     }
 
     Ok(())
@@ -475,6 +501,7 @@ impl event::EventHandler for MainState {
     self.draw_grid(ctx)?;
     self.draw_case(ctx)?;
     self.draw_current_piece(ctx)?;
+    self.draw_score(ctx)?;
 
     graphics::present(ctx)?;
     Ok(())
@@ -482,13 +509,16 @@ impl event::EventHandler for MainState {
 }
 
 pub fn main() -> GameResult {
+  let resource_dir = path::PathBuf::from("./resources");
+
   let cb = ggez::ContextBuilder::new("Tetris", "ggez")
+    .add_resource_path(resource_dir)
     .window_mode(
       conf::WindowMode::default()
           .fullscreen_type(conf::FullscreenType::Windowed)
           .resizable(false)
           .dimensions(800.0, 600.0));
   let (ctx, event_loop) = &mut cb.build()?;
-  let state = &mut MainState::new()?;
+  let state = &mut MainState::new(ctx)?;
   event::run(ctx, event_loop, state)
 }
