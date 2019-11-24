@@ -15,6 +15,7 @@ use rand::{ distributions::{Distribution, Standard}, Rng};
 
 const GRID_WIDTH: usize = 10;
 const GRID_HEIGHT: usize = 20;
+const GRID_STROKE_SIZE: f32 = 1.0;
 
 #[derive(Clone,Copy,PartialEq)]
 enum Case {
@@ -166,10 +167,18 @@ fn drop_speed(level: u32) -> Duration {
   Duration::from_secs_f64((0.8 - (level_f64 * 0.007)).powf(level_f64))
 }
 
+fn pixel_x(x: usize) -> f32 {
+  GRID_STROKE_SIZE + CASE_BORDER + (x as f32) * (GRID_STROKE_SIZE + CASE_BORDER + CASE_SIZE + CASE_BORDER)
+}
+
+fn pixel_y(y: usize) -> f32 {
+  pixel_x(y)
+}
+
 struct MainState {
   frame: graphics::Rect,
   grid: [[Case; GRID_HEIGHT]; GRID_WIDTH],
-  grid_rect: graphics::Rect,
+  grid_frame: graphics::Rect,
   current_piece: Option<Piece>,
   current_piece_ghost_offset_y: i32,
   next_pieces: Vec<Piece>,
@@ -184,8 +193,8 @@ struct MainState {
 
 impl MainState {
   fn new(ctx: &mut Context) -> GameResult<MainState> {
-    let width = (GRID_WIDTH as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
-    let height = (GRID_HEIGHT as f32) * (CASE_SIZE + 2.0 * CASE_BORDER);
+    let width = pixel_x(GRID_WIDTH) - pixel_x(0);
+    let height = pixel_y(GRID_HEIGHT) - pixel_y(0);
     let frame = graphics::screen_coordinates(ctx);
     let left = (frame.w - width) / 2.0;
     let top = (frame.h - height) / 2.0;
@@ -195,7 +204,7 @@ impl MainState {
     let mut s = MainState {
       frame: frame,
       grid: [[Case::Empty; GRID_HEIGHT]; GRID_WIDTH],
-      grid_rect: graphics::Rect::new(left, top, width, height),
+      grid_frame: graphics::Rect::new(left, top, width, height),
       current_piece: None,
       current_piece_ghost_offset_y: 0,
       next_pieces: Vec::new(),
@@ -419,47 +428,47 @@ impl MainState {
   fn draw_grid(&mut self, ctx: &mut Context) -> GameResult {
     let gridmesh_builder = &mut graphics::MeshBuilder::new();
     gridmesh_builder.rectangle(
-      graphics::DrawMode::stroke(1.0),
-      graphics::Rect::new(0.0, 0.0, self.grid_rect.w, self.grid_rect.h),
+      graphics::DrawMode::stroke(GRID_STROKE_SIZE),
+      graphics::Rect::new(0.0, 0.0, self.grid_frame.w, self.grid_frame.h),
       graphics::WHITE,
     );
     for i_y in 1..GRID_HEIGHT {
-      let y = (i_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0);
+      let y = pixel_y(i_y) - pixel_y(0);
       gridmesh_builder.line(
-        &[na::Point2::new(0.0, y), na::Point2::new(self.grid_rect.w, y)],
-        1.0,
+        &[na::Point2::new(0.0, y), na::Point2::new(self.grid_frame.w, y)],
+        GRID_STROKE_SIZE,
         graphics::WHITE
       )?;
     }
     for i_x in 1..GRID_WIDTH {
-      let x = (i_x as f32) * (CASE_SIZE + CASE_BORDER * 2.0);
+      let x = pixel_y(i_x) - pixel_y(0);
       gridmesh_builder.line(
-        &[na::Point2::new(x, 0.0), na::Point2::new(x, self.grid_rect.h)],
-        1.0,
+        &[na::Point2::new(x, 0.0), na::Point2::new(x, self.grid_frame.h)],
+        GRID_STROKE_SIZE,
         graphics::WHITE
       )?;
     }
     let grid_mesh = gridmesh_builder.build(ctx)?;
 
-    graphics::draw(ctx, &grid_mesh, (na::Point2::new(self.grid_rect.x, self.grid_rect.y),))?;
+    graphics::draw(ctx, &grid_mesh, (na::Point2::new(self.grid_frame.x, self.grid_frame.y),))?;
 
     Ok(())
   }
 
-  fn draw_case(&mut self, ctx: &mut Context) -> GameResult {
+  fn draw_cases(&mut self, ctx: &mut Context) -> GameResult {
     for i_x in 0..GRID_WIDTH {
-      let x = (i_x as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
+      let x = pixel_x(i_x);
       for i_y in 0..GRID_HEIGHT {
         let case = self.grid[i_x][i_y];
         if case != Case::Empty {
-          let y = (i_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER;
+          let y = pixel_y(i_y);
           let mesh_case = graphics::Mesh::new_rectangle(
             ctx, 
             graphics::DrawMode::fill(),
             graphics::Rect::new(x, y, CASE_SIZE as f32, CASE_SIZE as f32),
             case_color(case),
           )?;
-          graphics::draw(ctx, &mesh_case, (na::Point2::new(self.grid_rect.x, self.grid_rect.y),))?;
+          graphics::draw(ctx, &mesh_case, (na::Point2::new(self.grid_frame.x, self.grid_frame.y),))?;
         }
       }
     }
@@ -476,7 +485,7 @@ impl MainState {
   }
 
   fn draw_score(&mut self, ctx: &mut Context) -> GameResult {
-    graphics::draw(ctx, &self.text, (na::Point2::new(self.grid_rect.x / 4.0, self.frame.h / 4.0),))?;
+    graphics::draw(ctx, &self.text, (na::Point2::new(self.grid_frame.x / 4.0, self.frame.h / 4.0),))?;
 
     Ok(())
   }
@@ -484,8 +493,8 @@ impl MainState {
   fn draw_current_piece(&mut self, ctx: &mut Context) -> GameResult {
     match &self.current_piece {
       Some (piece) => {
-        let global_x = self.grid_rect.x + ((piece.x as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER);
-        let global_y = self.grid_rect.y + ((piece.y as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER);
+        let global_x = self.grid_frame.x + pixel_x(piece.x as usize) - pixel_x(0);
+        let global_y = self.grid_frame.y + pixel_y(piece.y as usize) - pixel_y(0);
         self.draw_piece(ctx, piece, graphics::DrawMode::fill(), global_x, global_y)?;
       },
       None => {},
@@ -497,8 +506,8 @@ impl MainState {
   fn draw_current_piece_ghost(&mut self, ctx: &mut Context) -> GameResult {
     match &self.current_piece {
       Some (piece) => {
-        let global_x = self.grid_rect.x + ((piece.x as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER);
-        let global_y = self.grid_rect.y + ((self.current_piece_ghost_offset_y as f32) * (CASE_SIZE + CASE_BORDER * 2.0) + CASE_BORDER);
+        let global_x = self.grid_frame.x + pixel_x(piece.x as usize) - pixel_x(0);
+        let global_y = self.grid_frame.y + pixel_y(self.current_piece_ghost_offset_y as usize) - pixel_y(0);
         self.draw_piece(ctx, piece, graphics::DrawMode::stroke(1.0), global_x, global_y)?;
       },
       None => {},
@@ -508,10 +517,10 @@ impl MainState {
   }
 
   fn draw_next_pieces(&self, ctx: &mut Context) -> GameResult {
-    let global_x = self.grid_rect.x + self.grid_rect.w + (self.grid_rect.x / 2.0);
+    let global_x = self.grid_frame.x + self.grid_frame.w + (self.grid_frame.x / 2.0);
     let mut global_y = self.frame.h / 4.0;
     for piece in &self.next_pieces {
-      let piece_x = global_x - (piece.width() as f32 * (CASE_SIZE + (CASE_BORDER * 2.0)) / 2.0);
+      let piece_x = global_x - (piece.width() as f32 * (CASE_SIZE + CASE_BORDER * 2.0) / 2.0);
       self.draw_piece(ctx, piece, graphics::DrawMode::fill(), piece_x, global_y)?;
       global_y += 100.0;
     }
@@ -521,10 +530,10 @@ impl MainState {
 
   fn draw_piece(&self, ctx: &mut Context, piece: &Piece, draw_mode: graphics::DrawMode, global_x: f32, global_y: f32) -> GameResult {
     for (i_y, line) in piece.cases.iter().enumerate() {
-      let y = (i_y as f32) * (CASE_SIZE + (CASE_BORDER * 2.0));
+      let y = pixel_y(i_y);
       for (i_x, &case) in line.iter().enumerate() {
         if case != Case::Empty {
-          let x = (i_x as f32) * (CASE_SIZE + (CASE_BORDER * 2.0));
+          let x = pixel_x(i_x);
           let mesh_case = graphics::Mesh::new_rectangle(
             ctx,
             draw_mode,
@@ -605,7 +614,7 @@ impl event::EventHandler for MainState {
     graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
     self.draw_grid(ctx)?;
-    self.draw_case(ctx)?;
+    self.draw_cases(ctx)?;
     self.draw_current_piece_ghost(ctx)?;
     self.draw_current_piece(ctx)?;
     self.draw_score(ctx)?;
