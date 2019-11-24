@@ -641,8 +641,11 @@ impl event::EventHandler for MainState {
 pub fn main() -> GameResult {
   let resource_dir = path::PathBuf::from("./resources");
 
-  let cb = ggez::ContextBuilder::new("Tetris", "ggez")
+  let cb = ggez::ContextBuilder::new("Tetris", "Datoh")
     .add_resource_path(resource_dir)
+    .window_setup(
+      conf::WindowSetup::default()
+      .title("TetrisRS 2019 by Datoh - https://twitter.com/datoh - https://github.com/Datoh/TetrisRS"))
     .window_mode(
       conf::WindowMode::default()
           .fullscreen_type(conf::FullscreenType::Windowed)
