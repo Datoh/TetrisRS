@@ -604,6 +604,10 @@ impl event::EventHandler for MainState {
     Ok(())
   }
 
+  fn resize_event(&mut self, ctx: &mut Context, _width: f32, _height: f32) {
+    self.frame = graphics::screen_coordinates(ctx);
+  }
+
   fn key_down_event(&mut self, ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
       event::KeyCode::M =>
