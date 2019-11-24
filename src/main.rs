@@ -561,8 +561,8 @@ impl event::EventHandler for MainState {
   fn update(&mut self, ctx: &mut Context) -> GameResult {
     let delta = timer::delta(ctx);
 
-    let end = !self.generate_piece(delta);
-    let piece_is_done = !end && self.piece_move_down(delta);
+    let lost = !self.generate_piece(delta);
+    let piece_is_done = !lost && self.piece_move_down(delta);
     
     if piece_is_done {
       let line_removed = self.remove_complete_lines();
@@ -575,7 +575,7 @@ impl event::EventHandler for MainState {
       }
     }
 
-    if end {
+    if lost {
       self.play_lost(ctx)?;
       self.reset(ctx)?;
     }
