@@ -2,6 +2,8 @@ use std::path;
 use std::time::Duration;
 
 use ggez;
+use ggez::audio;
+use ggez::audio::SoundSource;
 use ggez::conf;
 use ggez::event;
 use ggez::graphics;
@@ -525,6 +527,23 @@ impl MainState {
     
     Ok(())
   }
+
+  fn play_line_removed(&mut self, ctx: &mut Context, line_removed: u32) -> GameResult {
+    if line_removed > 0 {
+      let mut sound = match line_removed {
+        4 => audio::Source::new(ctx, "/tetris.wav")?,
+        _ => audio::Source::new(ctx, "/line.wav")?,
+      };        
+      sound.play_detached()?;
+    }
+    Ok(())
+  }
+
+  fn play_lost(&mut self, ctx: &mut Context) -> GameResult {
+    let mut sound = audio::Source::new(ctx, "/lost.mp3")?;
+    sound.play_detached()?;
+    Ok(())
+  }
 }
 
 impl event::EventHandler for MainState {
@@ -537,6 +556,7 @@ impl event::EventHandler for MainState {
     if piece_is_done {
       let line_removed = self.remove_complete_lines();
       if line_removed > 0 {
+        self.play_line_removed(ctx, line_removed)?;
         self.compute_score(line_removed);
         self.line_removed += line_removed;
         self.increase_level();
@@ -545,6 +565,7 @@ impl event::EventHandler for MainState {
     }
 
     if end {
+      self.play_lost(ctx)?;
       self.reset(ctx)?;
     }
 
