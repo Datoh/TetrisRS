@@ -390,6 +390,18 @@ impl MainState {
     }
   }
 
+  fn piece_move_vertically(&mut self, dy: i32) {
+    if self.current_piece.is_none() {
+      return;
+    }
+
+    let piece = self.current_piece.as_mut().unwrap();
+    if !check_collision(&self.grid, piece, 0, dy) {
+      piece.y += dy;
+      piece.last_move = Duration::from_secs(0);
+    }
+  }
+
   fn piece_drop(&mut self) {
     if self.current_piece.is_none() {
       return;
@@ -603,8 +615,9 @@ impl event::EventHandler for MainState {
       event::KeyCode::R => self.reset(ctx).unwrap(),
       event::KeyCode::Left => self.piece_move_horizontally(-1),
       event::KeyCode::Right => self.piece_move_horizontally(1),
-      event::KeyCode::Down => self.piece_drop(),
+      event::KeyCode::Down => self.piece_move_vertically(1),
       event::KeyCode::Up => self.rotate(),
+      event::KeyCode::Space => self.piece_drop(),
       _ => (),
     }
     self.update_current_piece_ghost();
