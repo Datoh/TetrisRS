@@ -179,6 +179,7 @@ struct MainState {
   level: u32,
   line_removed: u32,
   text: graphics::Text,
+  sound_theme: audio::Source,
 }
 
 impl MainState {
@@ -204,9 +205,14 @@ impl MainState {
       level: 0,
       line_removed: 0,
       text: graphics::Text::new(("", font, FONT_SIZE)),
+      sound_theme: audio::Source::new(ctx, "/theme.ogg")?,
     };
 
     s.reset(ctx)?;
+
+    s.sound_theme.set_repeat(true);
+    s.sound_theme.set_volume(0.5);
+    s.sound_theme.play()?;
 
     Ok(s)
   }
@@ -224,6 +230,8 @@ impl MainState {
     for _ in 0..NEXT_PIECES_COUNT {
       self.next_pieces.push(create_piece(rand::random()));
     }
+    self.sound_theme.set_pitch(1.0);
+
     Ok(())
   }
 
@@ -321,6 +329,9 @@ impl MainState {
     if self.line_removed > self.level * 5 {
       self.level += 1;
       self.move_speed = drop_speed(self.level);
+      self.sound_theme.stop();
+      self.sound_theme.set_pitch(1.0 + (0.1 * (self.level - 1) as f32));
+      self.sound_theme.play().unwrap();
       println!("Level: {}", self.level);
       println!("Speed: {:?}", self.move_speed);
     }
@@ -574,6 +585,12 @@ impl event::EventHandler for MainState {
 
   fn key_down_event(&mut self, ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
+      event::KeyCode::M =>
+        if self.sound_theme.playing() {
+          self.sound_theme.pause();
+        } else {
+          self.sound_theme.resume();
+        },
       event::KeyCode::R => self.reset(ctx).unwrap(),
       event::KeyCode::Left => self.piece_move_horizontally(-1),
       event::KeyCode::Right => self.piece_move_horizontally(1),
