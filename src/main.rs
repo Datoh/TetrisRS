@@ -551,8 +551,9 @@ impl event::EventHandler for MainState {
     Ok(())
   }
 
-  fn key_down_event(&mut self, _ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
+  fn key_down_event(&mut self, ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
+      event::KeyCode::R => self.reset(ctx).unwrap(),
       event::KeyCode::Left => self.piece_move_horizontally(-1),
       event::KeyCode::Right => self.piece_move_horizontally(1),
       event::KeyCode::Down => self.piece_drop(),
