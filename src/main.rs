@@ -189,6 +189,7 @@ struct MainState {
   line_removed: u32,
   text: graphics::Text,
   sound_theme: audio::Source,
+  sound_theme_on: bool,
 }
 
 impl MainState {
@@ -215,13 +216,12 @@ impl MainState {
       line_removed: 0,
       text: graphics::Text::new(("", font, FONT_SIZE)),
       sound_theme: audio::Source::new(ctx, "/theme.ogg")?,
+      sound_theme_on: true,
     };
 
-    s.reset(ctx)?;
-
     s.sound_theme.set_repeat(true);
-    s.sound_theme.set_volume(0.5);
-    s.sound_theme.play()?;
+    s.sound_theme.set_volume(0.3);
+    s.reset(ctx)?;
 
     Ok(s)
   }
@@ -239,7 +239,11 @@ impl MainState {
     for _ in 0..NEXT_PIECES_COUNT {
       self.next_pieces.push(create_piece(rand::random()));
     }
+    self.sound_theme.stop();
     self.sound_theme.set_pitch(1.0);
+    if self.sound_theme_on {
+      self.sound_theme.play()?;
+    }
 
     Ok(())
   }
@@ -340,7 +344,9 @@ impl MainState {
       self.move_speed = drop_speed(self.level);
       self.sound_theme.stop();
       self.sound_theme.set_pitch(1.0 + (0.1 * (self.level - 1) as f32));
-      self.sound_theme.play().unwrap();
+      if self.sound_theme_on {
+        self.sound_theme.play().unwrap();
+      }
       println!("Level: {}", self.level);
       println!("Speed: {:?}", self.move_speed);
     }
@@ -610,12 +616,14 @@ impl event::EventHandler for MainState {
 
   fn key_down_event(&mut self, ctx: &mut Context, key: event::KeyCode, _mods: event::KeyMods, _: bool) {
     match key {
-      event::KeyCode::M =>
-        if self.sound_theme.playing() {
-          self.sound_theme.pause();
+      event::KeyCode::M => {
+        self.sound_theme_on = !self.sound_theme_on;
+        if self.sound_theme_on {
+          self.sound_theme.play().unwrap();
         } else {
-          self.sound_theme.resume();
-        },
+          self.sound_theme.stop();
+        }
+      },
       event::KeyCode::R => self.reset(ctx).unwrap(),
       event::KeyCode::Left => self.piece_move_horizontally(-1),
       event::KeyCode::Right => self.piece_move_horizontally(1),
