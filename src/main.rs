@@ -175,6 +175,12 @@ fn pixel_y(y: usize) -> f32 {
   pixel_x(y)
 }
 
+struct ScoreStats {
+  score: i64,
+  level: u32,
+  line_removed: u32,
+}
+
 struct MainState {
   frame: graphics::Rect,
   grid: [[Case; GRID_HEIGHT]; GRID_WIDTH],
@@ -184,12 +190,12 @@ struct MainState {
   next_pieces: Vec<Piece>,
   move_speed: Duration,
   timer_piece_generation: Duration,
-  score: i64,
-  level: u32,
-  line_removed: u32,
   text: graphics::Text,
   sound_theme: audio::Source,
   sound_theme_on: bool,
+  current_score: ScoreStats,
+  previous_score: ScoreStats,
+  best_score: ScoreStats,
 }
 
 impl MainState {
@@ -211,12 +217,12 @@ impl MainState {
       next_pieces: Vec::new(),
       move_speed: Duration::from_secs(0),
       timer_piece_generation: Duration::from_secs(0),
-      score: 0,
-      level: 0,
-      line_removed: 0,
       text: graphics::Text::new(("", font, FONT_SIZE)),
       sound_theme: audio::Source::new(ctx, "/theme.ogg")?,
       sound_theme_on: true,
+      current_score: ScoreStats { score: 0, level: 0, line_removed: 0, },
+      previous_score: ScoreStats { score: 0, level: 0, line_removed: 0, },
+      best_score: ScoreStats { score: 0, level: 0, line_removed: 0, },
     };
 
     s.sound_theme.set_repeat(true);
@@ -231,9 +237,9 @@ impl MainState {
     self.current_piece = None;
     self.move_speed = drop_speed(1);
     self.timer_piece_generation = Duration::from_secs(0);
-    self.level = 1;
-    self.score = 0;
-    self.line_removed = 0;
+    self.current_score.level = 1;
+    self.current_score.score = 0;
+    self.current_score.line_removed = 0;
     self.create_score_text(ctx)?;
     self.next_pieces.clear();
     for _ in 0..NEXT_PIECES_COUNT {
@@ -334,20 +340,20 @@ impl MainState {
       4 => 1200,
       _ => 0,
     };
-    self.score += factor * (self.level as i64);
-    println!("Score: {}", self.score);
+    self.current_score.score += factor * (self.current_score.level as i64);
+    println!("Score: {}", self.current_score.score);
   }
 
   fn increase_level(&mut self) {
-    if self.line_removed > self.level * 5 {
-      self.level += 1;
-      self.move_speed = drop_speed(self.level);
+    if self.current_score.line_removed > self.current_score.level * 5 {
+      self.current_score.level += 1;
+      self.move_speed = drop_speed(self.current_score.level);
       self.sound_theme.stop();
-      self.sound_theme.set_pitch(1.0 + (0.1 * (self.level - 1) as f32));
+      self.sound_theme.set_pitch(1.0 + (0.1 * (self.current_score.level - 1) as f32));
       if self.sound_theme_on {
         self.sound_theme.play().unwrap();
       }
-      println!("Level: {}", self.level);
+      println!("Level: {}", self.current_score.level);
       println!("Speed: {:?}", self.move_speed);
     }
   }
@@ -496,7 +502,13 @@ impl MainState {
 
   fn create_score_text(&mut self, ctx: &mut Context) -> GameResult {
     let font = graphics::Font::new(ctx, FONT_NAME)?;
-    let text = format!("Level: {}\n\nScore: {}\n\nLines: {}", self.level, self.score, self.line_removed);
+    let text = format!(
+"Score: {}\n\nLevel: {}\n\nLines: {}\n\n\n
+Previous: {} / {} / {}\n
+Best: {} / {} / {}",
+      self.current_score.score, self.current_score.level, self.current_score.line_removed,
+      self.previous_score.score, self.previous_score.level, self.previous_score.line_removed,
+      self.best_score.score, self.best_score.level, self.best_score.line_removed);
     self.text = graphics::Text::new((text, font, FONT_SIZE));
 
     Ok(())
@@ -596,13 +608,23 @@ impl event::EventHandler for MainState {
       if line_removed > 0 {
         self.play_line_removed(ctx, line_removed)?;
         self.compute_score(line_removed);
-        self.line_removed += line_removed;
+        self.current_score.line_removed += line_removed;
         self.increase_level();
         self.create_score_text(ctx)?;
       }
     }
 
     if lost {
+      if self.current_score.score > 0 {
+        self.previous_score.score = self.current_score.score;
+        self.previous_score.level = self.current_score.level;
+        self.previous_score.line_removed = self.current_score.line_removed;
+      }
+      if self.current_score.score > self.best_score.score {
+        self.best_score.score = self.current_score.score;
+        self.best_score.level = self.current_score.level;
+        self.best_score.line_removed = self.current_score.line_removed;
+      }
       self.play_lost(ctx)?;
       self.reset(ctx)?;
     }
