@@ -136,32 +136,6 @@ fn create_piece(case: Case) -> Piece {
   return Piece { case: case, x: ((GRID_WIDTH - cases[0].len()) / 2) as i32, y: 0, last_move: Duration::from_secs(0), cases: cases, index_rotation: 0 };
 }
 
-fn check_collision(grid: &[[Case; GRID_HEIGHT]; GRID_WIDTH], piece: &Piece, dx: i32, dy: i32) -> bool {
-  let piece_x = piece.x + dx;
-  let piece_y = piece.y + dy;
-
-  if piece_y + piece.height() > GRID_HEIGHT as i32 {
-    return true;
-  }
-  if piece_x < 0 || piece_x + piece.width() > GRID_WIDTH as i32 {
-    return true;
-  }
-
-  for (i_v_y, line) in piece.cases.iter().enumerate() {
-    let i_y = piece_y as usize + i_v_y;
-    for (i_v_x, &case) in line.iter().enumerate() {
-      if case != Case::Empty {
-        let i_x = piece_x as usize + i_v_x;
-        if grid[i_x][i_y] != Case::Empty {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
 fn drop_speed(level: u32) -> Duration {
   let level_f64 = (level - 1) as f64;
   Duration::from_secs_f64((0.8 - (level_f64 * 0.007)).powf(level_f64))
@@ -278,19 +252,19 @@ impl MainState {
     piece.y = piece.y.max(0);
     piece.index_rotation = (piece.index_rotation + 1) % 4;
 
-    let mut ok = !check_collision(&self.grid, &piece, 0, 0);
+    let mut ok = !self.check_collision(0, 0);
     if !ok {
       piece.x -= 1;
-      ok = !check_collision(&self.grid, &piece, 0, 0);
+      ok = !self.check_collision(0, 0);
     }
     if !ok {
       piece.x += 2;
-      ok = !check_collision(&self.grid, &piece, 0, 0);
+      ok = !self.check_collision(0, 0);
     }
     if !ok {
       piece.x -= 1;
       piece.y -= 1;
-      ok = !check_collision(&self.grid, &piece, 0, 0);
+      ok = !self.check_collision(0, 0);
     }
     if ok {
       self.current_piece = Some(piece);
@@ -367,7 +341,7 @@ impl MainState {
     if self.timer_piece_generation > self.move_speed {
       let piece = self.next_pieces.remove(0);
       self.timer_piece_generation = Duration::from_secs(0);
-      let fit_in_grid = !check_collision(&self.grid, &piece, 0, 0);
+      let fit_in_grid = !self.check_collision(0, 0);
       self.current_piece = Some(piece);
       self.update_current_piece_ghost();
 
@@ -383,10 +357,10 @@ impl MainState {
       return;
     }
 
-    let piece = self.current_piece.as_ref().unwrap();
     self.current_piece_ghost_offset_y = (0..(GRID_HEIGHT as i32 + 1)).find(|&offset_y|
-      check_collision(&self.grid, piece, 0, offset_y)
+      self.check_collision(0, offset_y)
     ).unwrap();
+    let piece = self.current_piece.as_ref().unwrap();
     self.current_piece_ghost_offset_y += piece.y - 1;
     self.current_piece_ghost_offset_y.min(piece.y);
   }
@@ -396,8 +370,8 @@ impl MainState {
       return;
     }
 
-    let piece = self.current_piece.as_mut().unwrap();
-    if !check_collision(&self.grid, piece, dx, 0) {
+    if !self.check_collision(dx, 0) {
+      let piece = self.current_piece.as_mut().unwrap();
       piece.x += dx;
     }
   }
@@ -407,8 +381,8 @@ impl MainState {
       return;
     }
 
-    let piece = self.current_piece.as_mut().unwrap();
-    if !check_collision(&self.grid, piece, 0, dy) {
+    if !self.check_collision(0, dy) {
+      let piece = self.current_piece.as_mut().unwrap();
       piece.y += dy;
       piece.last_move = Duration::from_secs(0);
     }
@@ -419,8 +393,8 @@ impl MainState {
       return;
     }
 
-    let piece = self.current_piece.as_mut().unwrap();
-    while !check_collision(&self.grid, piece, 0, 1) {
+    while !self.check_collision(0, 1) {
+      let piece = self.current_piece.as_mut().unwrap();
       piece.y += 1;
     }
   }
@@ -433,7 +407,7 @@ impl MainState {
     let dy: i32 = 1;
     let piece = self.current_piece.as_ref().unwrap();
     let should_move = piece.last_move + delta > self.move_speed;
-    let can_move = should_move && !check_collision(&self.grid, piece, 0, dy);
+    let can_move = should_move && !self.check_collision(0, dy);
 
     if should_move && !can_move {
       self.put_piece_in_grid();
@@ -447,6 +421,37 @@ impl MainState {
       piece.last_move += delta;
     }
     return should_move && !can_move;
+  }
+
+  fn check_collision(&mut self, dx: i32, dy: i32) -> bool {
+    if self.current_piece.is_none() {
+      return false;
+    }
+
+    let piece = self.current_piece.as_ref().unwrap();
+    let piece_x = piece.x + dx;
+    let piece_y = piece.y + dy;
+
+    if piece_y + piece.height() > GRID_HEIGHT as i32 {
+      return true;
+    }
+    if piece_x < 0 || piece_x + piece.width() > GRID_WIDTH as i32 {
+      return true;
+    }
+
+    for (i_v_y, line) in piece.cases.iter().enumerate() {
+      let i_y = piece_y as usize + i_v_y;
+      for (i_v_x, &case) in line.iter().enumerate() {
+        if case != Case::Empty {
+          let i_x = piece_x as usize + i_v_x;
+          if self.grid[i_x][i_y] != Case::Empty {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   fn draw_grid(&mut self, ctx: &mut Context) -> GameResult {
